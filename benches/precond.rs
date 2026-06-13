@@ -2,7 +2,11 @@ use core::mem::MaybeUninit;
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use dyn_stack::{MemStack, StackReq};
+use dyn_stack::{MemBuffer, MemStack, StackReq};
+use faer::matrix_free::IdentityPrecond;
+use faer::matrix_free::conjugate_gradient::{
+    CgParams, conjugate_gradient, conjugate_gradient_scratch,
+};
 use faer::sparse::{SparseColMat, Triplet};
 use faer::{
     Mat, Par, Side,
@@ -292,8 +296,123 @@ fn bench_ic0_refactorize(c: &mut Criterion) {
     group.finish();
 }
 
+/// High-contrast variable-coefficient diffusion `-div(k grad u)`, the realistic
+/// badly-conditioned SPD problem where preconditioning earns its keep. `k` jumps
+/// between `1` and `1e4` across `4x4`-cell blocks; face conductivities use the
+/// harmonic mean. Mirrors the `speedup` example.
+fn variable_diffusion_2d(grid: usize) -> SparseColMat<usize, f64> {
+    let n = grid * grid;
+    let conductivity = |gx: usize, gy: usize| {
+        if (gx / 4 + gy / 4).is_multiple_of(2) {
+            1.0
+        } else {
+            1.0e4
+        }
+    };
+    let harmonic = |a: f64, b: f64| 2.0 * a * b / (a + b);
+
+    let mut triplets = Vec::new();
+    for gy in 0..grid {
+        for gx in 0..grid {
+            let idx = gy * grid + gx;
+            let ki = conductivity(gx, gy);
+            let mut diag = 0.0;
+            let mut face = |ngx: usize, ngy: usize, nidx: usize, diag: &mut f64| {
+                let t = harmonic(ki, conductivity(ngx, ngy));
+                *diag += t;
+                triplets.push(Triplet::new(idx, nidx, -t));
+            };
+            if gx > 0 {
+                face(gx - 1, gy, idx - 1, &mut diag);
+            } else {
+                diag += ki;
+            }
+            if gx + 1 < grid {
+                face(gx + 1, gy, idx + 1, &mut diag);
+            } else {
+                diag += ki;
+            }
+            if gy > 0 {
+                face(gx, gy - 1, idx - grid, &mut diag);
+            } else {
+                diag += ki;
+            }
+            if gy + 1 < grid {
+                face(gx, gy + 1, idx + grid, &mut diag);
+            } else {
+                diag += ki;
+            }
+            triplets.push(Triplet::new(idx, idx, diag));
+        }
+    }
+    SparseColMat::try_new_from_triplets(n, n, &triplets).unwrap()
+}
+
+/// Time a full CG solve (preconditioner build + iterate) to a fixed tolerance.
+fn cg_solve<P: Precond<f64>>(a: &SparseColMat<usize, f64>, b: &Mat<f64>, pc: &P) {
+    let n = a.nrows();
+    let mut out = Mat::<f64>::zeros(n, 1);
+    let params = CgParams::<f64> {
+        max_iters: 5000,
+        rel_tolerance: 1e-10,
+        ..Default::default()
+    };
+    let mut buf = MemBuffer::new(conjugate_gradient_scratch(pc, a.as_ref(), 1, Par::Seq));
+    let info = conjugate_gradient(
+        out.as_mut(),
+        pc,
+        a.as_ref(),
+        b.as_ref(),
+        params,
+        |_| {},
+        Par::Seq,
+        MemStack::new(&mut buf),
+    )
+    .expect("CG should converge");
+    black_box(info.iter_count);
+    black_box(&out);
+}
+
+/// The headline benchmark: end-to-end CG solve, with vs without a
+/// preconditioner, on a badly-conditioned system. This is what actually matters
+/// to a user — total time to a solution, not the cost of one `apply`.
+fn bench_cg_solve(c: &mut Criterion) {
+    let mut group = c.benchmark_group("cg_full_solve");
+    // Long-running solves; keep the sample count modest.
+    group.sample_size(10);
+
+    for &grid in &[32usize, 64, 128] {
+        let a = variable_diffusion_2d(grid);
+        let n = a.nrows();
+        let b = Mat::<f64>::from_fn(n, 1, |i, _| ((i % 13) as f64 - 6.0) * 0.5);
+        let label = format!("grid{grid}_n{n}");
+
+        group.bench_with_input(BenchmarkId::new("none", &label), &grid, |bch, _| {
+            bch.iter(|| cg_solve(&a, &b, &IdentityPrecond { dim: n }));
+        });
+
+        group.bench_with_input(BenchmarkId::new("jacobi", &label), &grid, |bch, _| {
+            bch.iter(|| {
+                let diag: Vec<f64> = (0..n).map(|i| *a.as_ref().get(i, i).unwrap()).collect();
+                let pc = JacobiPrecond::try_from_diagonal(&diag).unwrap();
+                cg_solve(&a, &b, &pc);
+            });
+        });
+
+        group.bench_with_input(BenchmarkId::new("ic0", &label), &grid, |bch, _| {
+            bch.iter(|| {
+                let pc = Ic0::<usize, f64>::try_new(a.as_ref()).unwrap();
+                cg_solve(&a, &b, &pc);
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
+    bench_cg_solve,
     bench_jacobi,
     bench_jacobi_out_of_place,
     bench_solve_precond,
