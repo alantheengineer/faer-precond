@@ -13,8 +13,7 @@ use faer_precond::{jacobi::JacobiPrecond, SolvePrecond};
 fn with_stack(req: StackReq, f: impl FnOnce(&mut MemStack)) {
     let nbytes = req.unaligned_bytes_required().max(1);
     let mut buf = vec![MaybeUninit::<u8>::uninit(); nbytes].into_boxed_slice();
-    let mut stack = MemStack::new(&mut buf);
-    f(&mut stack);
+    f(MemStack::new(&mut buf));
 }
 
 fn make_spd_tridiagonal(n: usize) -> Mat<f64> {
