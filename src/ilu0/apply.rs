@@ -1,5 +1,37 @@
+//! Triangular solve dispatch for ILU(0).
+
+use faer::sparse::linalg::triangular_solve;
+use faer::{Conj, MatMut, Par};
+use faer_traits::{ComplexField, Index};
+
 use super::numeric::Ilu0;
 
-pub fn apply_ilu0_in_place<I, T>(_ilu: &Ilu0<I, T>) {
-    todo!("forward/back solves for ILU(0) go here")
+/// Apply `M^{-1} = U^{-1} L^{-1}` (forward then back) to `rhs` in place.
+pub(crate) fn solve_in_place<I, T>(ilu: &Ilu0<I, T>, conj: Conj, rhs: MatMut<'_, T>, par: Par)
+where
+    I: Index,
+    T: ComplexField,
+{
+    let l = ilu.l_view();
+    let u = ilu.u_view();
+    let mut rhs = rhs;
+    triangular_solve::solve_unit_lower_triangular_in_place(l, conj, rhs.as_mut(), par);
+    triangular_solve::solve_upper_triangular_in_place(u, conj, rhs.as_mut(), par);
+}
+
+/// Apply `M^{-T} = L^{-T} U^{-T}` (so first solve U^T then L^T) to `rhs` in place.
+pub(crate) fn solve_transpose_in_place<I, T>(
+    ilu: &Ilu0<I, T>,
+    conj: Conj,
+    rhs: MatMut<'_, T>,
+    par: Par,
+) where
+    I: Index,
+    T: ComplexField,
+{
+    let l = ilu.l_view();
+    let u = ilu.u_view();
+    let mut rhs = rhs;
+    triangular_solve::solve_upper_triangular_transpose_in_place(u, conj, rhs.as_mut(), par);
+    triangular_solve::solve_unit_lower_triangular_transpose_in_place(l, conj, rhs.as_mut(), par);
 }
