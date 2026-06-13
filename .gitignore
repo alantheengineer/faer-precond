@@ -1,1 +1,5 @@
 /target
+Cargo.lock
+# ^ Keep Cargo.lock for applications; ignore for libraries if you prefer to keep it reproducible:
+#! Cargo.lock
+.DS_Store
