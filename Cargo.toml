@@ -12,6 +12,7 @@ license = "MIT OR Apache-2.0"
 keywords = ["linear-algebra", "preconditioner", "sparse", "numerical", "faer"]
 categories = ["mathematics", "science", "algorithms"]
 exclude = [
+    ".github/*",
     "target/*",
 ]
 
