@@ -13,7 +13,9 @@ use faer::{
     linalg::solvers::Llt,
     matrix_free::{LinOp, Precond},
 };
-use faer_precond::{BlockJacobiPrecond, Ic0, Ilu0, JacobiPrecond, SolvePrecond, SymbolicIlu0};
+use faer_precond::{
+    BlockJacobiPrecond, Ic0, Ilu0, Ilutp, JacobiPrecond, SolvePrecond, SymbolicIlu0,
+};
 
 fn with_stack(req: StackReq, f: impl FnOnce(&mut MemStack)) {
     let nbytes = req.unaligned_bytes_required().max(1);
@@ -243,6 +245,50 @@ fn bench_ilu0_refactorize(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_ilutp_construct(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ilutp_construct");
+
+    for &n in &[256usize, 1024, 4096] {
+        let a = nonsymmetric_tridiagonal(n);
+        group.bench_with_input(BenchmarkId::new("tridiag_f64", n), &n, |b, _| {
+            b.iter(|| {
+                let pc = Ilutp::<usize, f64>::try_new(black_box(a.as_ref())).unwrap();
+                black_box(&pc);
+            });
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_ilutp_apply(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ilutp_apply_in_place");
+
+    for &(n, rhs_ncols) in &[(256usize, 1usize), (1024, 1), (4096, 1)] {
+        let a = nonsymmetric_tridiagonal(n);
+        let pc = Ilutp::<usize, f64>::try_new(a.as_ref()).unwrap();
+
+        let template = Mat::from_fn(n, rhs_ncols, |i, j| ((i + j) % 13) as f64 + 1.0);
+        let mut rhs = template.clone();
+
+        group.bench_with_input(
+            BenchmarkId::new("tridiag_f64", format!("{n}x{rhs_ncols}")),
+            &(n, rhs_ncols),
+            |b, _| {
+                b.iter(|| {
+                    rhs.as_mut().copy_from(template.as_ref());
+                    with_stack(pc.apply_in_place_scratch(rhs_ncols, Par::Seq), |stack| {
+                        pc.apply_in_place(black_box(rhs.as_mut()), Par::Seq, stack);
+                    });
+                    black_box(&rhs);
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 fn bench_ic0_apply(c: &mut Criterion) {
     let mut group = c.benchmark_group("ic0_apply_in_place");
 
@@ -419,6 +465,8 @@ criterion_group!(
     bench_block_jacobi,
     bench_ilu0_apply,
     bench_ilu0_refactorize,
+    bench_ilutp_construct,
+    bench_ilutp_apply,
     bench_ic0_apply,
     bench_ic0_refactorize,
 );

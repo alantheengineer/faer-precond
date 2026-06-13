@@ -13,6 +13,7 @@
 //! | [`BlockJacobiPrecond`] | dense diagonal blocks of `A` | `O(sum b_k²)` | Arbitrary block partition; LU per block. |
 //! | [`Ilu0`] | CSC sparsity of `A` | `O(nnz(A))` | Zero-fill incomplete LU. |
 //! | [`Ic0`] | CSC lower triangle of `A` | `O(nnz_L)` | Zero-fill incomplete Cholesky for HPD `A`. |
+//! | [`Ilutp`] | CSC of `A` + threshold/fill params | `O(nnz_LU)` | Threshold ILU with partial pivoting; general nonsymmetric workhorse. |
 //! | [`SolvePrecond`] | any faer factorisation (`Llt`, `Lu`, `Qr`, ...) | factorisation-dependent | Adapter, not a factorisation. |
 //!
 //! # Choosing a preconditioner
@@ -33,6 +34,12 @@
 //! - **[`Ilu0`] for general (nonsymmetric) sparse `A`.** The nonsymmetric
 //!   counterpart to IC(0), paired with GMRES or BiCGSTAB. Same zero-fill idea:
 //!   cheap to build and stores nothing beyond `A`'s sparsity pattern.
+//! - **[`Ilutp`] when [`Ilu0`] is too weak.** Threshold ILU with partial
+//!   pivoting: it adds fill where the factor needs it (tuned by a drop tolerance
+//!   and a fill budget) and pivots for stability — the robust choice for hard
+//!   nonsymmetric problems, badly-scaled operators, or matrices with small/zero
+//!   diagonal entries. Costs more to build and apply than [`Ilu0`], and its
+//!   pattern is value-dependent (no zero-allocation refactorisation).
 //! - **[`BlockJacobiPrecond`] when unknowns cluster into small dense groups.**
 //!   Several fields per mesh node, coupled species, or tightly-coupled
 //!   sub-systems. Inverting those blocks exactly captures the strong local
@@ -122,10 +129,12 @@ pub mod adapters;
 pub mod block_jacobi;
 pub mod ic0;
 pub mod ilu0;
+pub mod ilutp;
 pub mod jacobi;
 
 pub use adapters::SolvePrecond;
 pub use block_jacobi::{BlockJacobiError, BlockJacobiPrecond};
 pub use ic0::{Ic0, Ic0Error, SymbolicIc0};
 pub use ilu0::{Ilu0, Ilu0Error, SymbolicIlu0};
+pub use ilutp::{FillControl, Ilutp, IlutpError, IlutpParams, RowNorm};
 pub use jacobi::{JacobiError, JacobiPrecond};

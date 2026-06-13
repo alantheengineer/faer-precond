@@ -13,7 +13,7 @@ use faer::matrix_free::conjugate_gradient::{
 use faer::sparse::{SparseColMat, Triplet};
 use faer::{Mat, Par, Side, mat};
 
-use faer_precond::{BlockJacobiPrecond, Ic0, Ilu0, JacobiPrecond, SolvePrecond};
+use faer_precond::{BlockJacobiPrecond, Ic0, Ilu0, Ilutp, JacobiPrecond, SolvePrecond};
 
 /// 5-point Laplacian on a `grid × grid` mesh (full Hermitian CSC storage).
 /// SPD and diagonally dominant — used as the canonical SPD test problem.
@@ -50,6 +50,33 @@ fn tridiagonal_nonsymmetric(n: usize) -> SparseColMat<usize, f64> {
         if i > 0 {
             triplets.push(Triplet::new(i, i - 1, -2.0));
             triplets.push(Triplet::new(i - 1, i, -1.0));
+        }
+    }
+    SparseColMat::try_new_from_triplets(n, n, &triplets).unwrap()
+}
+
+/// 2-D advection-diffusion: the 5-point Laplacian with an asymmetric
+/// first-derivative term of strength `beta`. Strongly nonsymmetric for large
+/// `beta` — the regime where ILUTP earns its keep over ILU(0).
+fn advection_diffusion_2d(grid: usize, beta: f64) -> SparseColMat<usize, f64> {
+    let n = grid * grid;
+    let mut triplets = Vec::new();
+    for gy in 0..grid {
+        for gx in 0..grid {
+            let idx = gy * grid + gx;
+            triplets.push(Triplet::new(idx, idx, 4.0));
+            if gx > 0 {
+                triplets.push(Triplet::new(idx, idx - 1, -1.0 - beta));
+            }
+            if gx + 1 < grid {
+                triplets.push(Triplet::new(idx, idx + 1, -1.0 + beta));
+            }
+            if gy > 0 {
+                triplets.push(Triplet::new(idx, idx - grid, -1.0));
+            }
+            if gy + 1 < grid {
+                triplets.push(Triplet::new(idx, idx + grid, -1.0));
+            }
         }
     }
     SparseColMat::try_new_from_triplets(n, n, &triplets).unwrap()
@@ -201,6 +228,42 @@ fn ilu0_accelerates_bicgstab_on_nonsymmetric_problem() {
     assert!(
         pc_iters < baseline_iters,
         "ILU(0) should accelerate BiCGSTAB: baseline {baseline_iters} iters vs preconditioned {pc_iters}",
+    );
+}
+
+#[test]
+fn ilutp_accelerates_bicgstab_on_nonsymmetric_problem() {
+    let a = advection_diffusion_2d(12, 0.7);
+    let n = a.nrows();
+
+    let identity = IdentityPrecond { dim: n };
+    let baseline_iters = bicgstab_iter_count(&a, identity, identity, 500);
+
+    let pc = Ilutp::<usize, f64>::try_new(a.as_ref()).expect("ILUTP factorisation");
+    let pc_iters = bicgstab_iter_count(&a, &pc, IdentityPrecond { dim: n }, 500);
+
+    assert!(
+        pc_iters < baseline_iters,
+        "ILUTP should accelerate BiCGSTAB: baseline {baseline_iters} iters vs preconditioned {pc_iters}",
+    );
+}
+
+#[test]
+fn ilutp_outperforms_ilu0_on_strongly_nonsymmetric_problem() {
+    // With a strong advection term ILU(0)'s fixed pattern is weak; ILUTP's
+    // adaptive fill + pivoting should converge in no more iterations.
+    let a = advection_diffusion_2d(12, 0.9);
+    let n = a.nrows();
+
+    let ilu0 = Ilu0::<usize, f64>::try_new(a.as_ref()).expect("ILU(0) factorisation");
+    let ilu0_iters = bicgstab_iter_count(&a, &ilu0, IdentityPrecond { dim: n }, 500);
+
+    let ilutp = Ilutp::<usize, f64>::try_new(a.as_ref()).expect("ILUTP factorisation");
+    let ilutp_iters = bicgstab_iter_count(&a, &ilutp, IdentityPrecond { dim: n }, 500);
+
+    assert!(
+        ilutp_iters <= ilu0_iters,
+        "ILUTP should not need more iterations than ILU(0): ILU(0) {ilu0_iters} vs ILUTP {ilutp_iters}",
     );
 }
 

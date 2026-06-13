@@ -15,6 +15,7 @@ faer's Krylov solvers (CG, GMRES, BiCGSTAB, LSMR, ...).
 | `BlockJacobiPrecond<T>` | Block-diagonal Jacobi — arbitrary block sizes, LU per block | ✅ |
 | `Ilu0<I, T>` | Zero-fill incomplete LU on a CSC matrix | ✅ |
 | `Ic0<I, T>` | Zero-fill incomplete Cholesky on a CSC Hermitian PD matrix | ✅ |
+| `Ilutp<I, T>` | Threshold ILU with partial pivoting (dual-threshold ILUT + column pivoting) | ✅ |
 | `SolvePrecond<S>` | Adapter wrapping any faer `SolveCore` factorisation (`Llt`, `Lu`, `Qr`, ...) | ✅ |
 
 ## Choosing a preconditioner
@@ -34,6 +35,12 @@ of `A` and how much work you can afford per iteration.
 - **`Ilu0` for general (nonsymmetric) sparse `A`.** The nonsymmetric
   counterpart to IC(0), paired with GMRES or BiCGSTAB. Cheap to build, stores
   nothing beyond `A`'s sparsity pattern.
+- **`Ilutp` when `Ilu0` is too weak.** Threshold ILU with partial pivoting: it
+  adds fill where the factor needs it (tuned by a drop tolerance and a fill
+  budget) and pivots for stability — the robust choice for hard nonsymmetric
+  problems, badly-scaled operators, or matrices with small/zero diagonals. Costs
+  more than `Ilu0`, and its pattern is value-dependent (no zero-allocation
+  refactorisation). See `examples/ilutp.rs` for the fill-vs-iterations tradeoff.
 - **`BlockJacobiPrecond` when unknowns cluster into small dense groups.**
   Several fields per mesh node, coupled species, tightly-coupled sub-systems.
   Inverting those blocks exactly captures the strong local coupling point-Jacobi
@@ -155,6 +162,41 @@ let pc = Ic0::try_new(a.as_ref()).expect("matrix is positive definite");
 
 let mut b = mat![[1.0_f64], [0.0], [0.0], [0.0], [0.0]];
 pc.apply_in_place(b.as_mut(), Par::Seq, MemStack::new(&mut []));
+```
+
+### ILUTP (threshold + partial pivoting)
+
+```rust
+use dyn_stack::{MemBuffer, MemStack};
+use faer::sparse::{SparseColMat, Triplet};
+use faer::{mat, Par};
+use faer::matrix_free::Precond;
+use faer_precond::{FillControl, Ilutp, IlutpParams};
+
+// A non-symmetric tridiagonal: diag 4, sub -2, super -1.
+let mut triplets = Vec::new();
+for i in 0..5usize {
+    triplets.push(Triplet::new(i, i, 4.0_f64));
+    if i > 0 {
+        triplets.push(Triplet::new(i, i - 1, -2.0));
+        triplets.push(Triplet::new(i - 1, i, -1.0));
+    }
+}
+let a = SparseColMat::<usize, f64>::try_new_from_triplets(5, 5, &triplets).unwrap();
+
+// Tune the drop tolerance, fill budget, and pivot aggressiveness.
+let params = IlutpParams {
+    drop_tol: 1e-3,
+    fill: FillControl::PerRow(10),
+    pivot_tol: 0.1,
+    ..Default::default()
+};
+let pc = Ilutp::try_new_with_params(a.as_ref(), params).unwrap();
+
+// Apply needs a length-n scratch column (it may apply the pivot permutation).
+let mut b = mat![[1.0_f64], [0.0], [0.0], [0.0], [0.0]];
+let mut buf = MemBuffer::new(pc.apply_in_place_scratch(1, Par::Seq));
+pc.apply_in_place(b.as_mut(), Par::Seq, MemStack::new(&mut buf));
 ```
 
 ### Wrapping a faer factorisation as a preconditioner
