@@ -185,7 +185,7 @@ where
 mod tests {
     use super::*;
     use faer::sparse::{SparseColMat, Triplet};
-    use faer::{mat, Mat, MatRef};
+    use faer::{Mat, MatRef, mat};
 
     fn assert_close(lhs: MatRef<'_, f64>, rhs: MatRef<'_, f64>, tol: f64) {
         assert_eq!(lhs.nrows(), rhs.nrows());
@@ -319,9 +319,18 @@ mod tests {
 
         let residual = &a_dense * &x - &b;
         let b_norm: f64 = b.as_ref().col(0).iter().map(|v| v * v).sum::<f64>().sqrt();
-        let r_norm: f64 = residual.as_ref().col(0).iter().map(|v| v * v).sum::<f64>().sqrt();
+        let r_norm: f64 = residual
+            .as_ref()
+            .col(0)
+            .iter()
+            .map(|v| v * v)
+            .sum::<f64>()
+            .sqrt();
         // ILU(0) for the 5-point Laplacian gives a much smaller residual than 1.
-        assert!(r_norm / b_norm < 0.5, "ILU(0) residual ratio {r_norm}/{b_norm} too large");
+        assert!(
+            r_norm / b_norm < 0.5,
+            "ILU(0) residual ratio {r_norm}/{b_norm} too large"
+        );
     }
 
     #[test]

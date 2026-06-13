@@ -9,14 +9,14 @@ use core::fmt::Debug;
 
 use dyn_stack::{MemBuffer, MemStack, StackReq};
 use faer::{
+    Conj, MatMut, MatRef, Par,
     linalg::lu::partial_pivoting::{factor as plu_factor, solve as plu_solve},
     matrix_free::{BiLinOp, BiPrecond, LinOp, Precond},
     perm::PermRef,
     prelude::ReborrowMut,
-    Conj, MatMut, MatRef, Par,
 };
-use faer_traits::math_utils::{abs2, copy, zero};
 use faer_traits::ComplexField;
+use faer_traits::math_utils::{abs2, copy, zero};
 
 /// Error produced when constructing a [`BlockJacobiPrecond`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +30,11 @@ pub enum BlockJacobiError {
     /// The last offset must equal the matrix dimension.
     BlockOffsetsMustEndAtDim { last: usize, dim: usize },
     /// Offsets must be strictly increasing — blocks of size 0 are rejected.
-    BlockOffsetsNotStrictlyIncreasing { index: usize, prev: usize, curr: usize },
+    BlockOffsetsNotStrictlyIncreasing {
+        index: usize,
+        prev: usize,
+        curr: usize,
+    },
     /// One of the diagonal blocks was singular (numerically rank-deficient).
     SingularBlock { block_index: usize },
 }
@@ -46,7 +50,10 @@ impl core::fmt::Display for BlockJacobiError {
                 write!(f, "block offsets must start at 0 but start at {first}")
             }
             Self::BlockOffsetsMustEndAtDim { last, dim } => {
-                write!(f, "block offsets must end at the matrix dimension {dim} but end at {last}")
+                write!(
+                    f,
+                    "block offsets must end at the matrix dimension {dim} but end at {last}"
+                )
             }
             Self::BlockOffsetsNotStrictlyIncreasing { index, prev, curr } => {
                 write!(
@@ -202,8 +209,7 @@ impl<T: ComplexField> BlockJacobiPrecond<T> {
             // Copy block into the packed factor buffer (column-major).
             let factor_range = factor_offsets[k]..factor_offsets[k + 1];
             let block_slice = &mut factors[factor_range];
-            let mut block =
-                MatMut::<T>::from_column_major_slice_mut(block_slice, size, size);
+            let mut block = MatMut::<T>::from_column_major_slice_mut(block_slice, size, size);
             for j in 0..size {
                 for i in 0..size {
                     *block.rb_mut().get_mut(i, j) = copy(a.get(start + i, start + j));
@@ -261,7 +267,11 @@ impl<T: ComplexField> BlockJacobiPrecond<T> {
         par: Par,
         stack: &mut MemStack,
     ) {
-        assert_eq!(rhs.nrows(), self.n, "rhs row count must match preconditioner dimension");
+        assert_eq!(
+            rhs.nrows(),
+            self.n,
+            "rhs row count must match preconditioner dimension"
+        );
 
         let nblocks = self.block_count();
         for k in 0..nblocks {
@@ -308,9 +318,21 @@ where
     }
 
     fn apply(&self, mut out: MatMut<'_, T>, rhs: MatRef<'_, T>, par: Par, stack: &mut MemStack) {
-        assert_eq!(out.nrows(), self.n, "out row count must match preconditioner dimension");
-        assert_eq!(rhs.nrows(), self.n, "rhs row count must match preconditioner dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+        assert_eq!(
+            out.nrows(),
+            self.n,
+            "out row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            rhs.nrows(),
+            self.n,
+            "rhs row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
         out.copy_from(rhs);
         self.apply_blocks(out, Conj::No, false, par, stack);
     }
@@ -322,9 +344,21 @@ where
         par: Par,
         stack: &mut MemStack,
     ) {
-        assert_eq!(out.nrows(), self.n, "out row count must match preconditioner dimension");
-        assert_eq!(rhs.nrows(), self.n, "rhs row count must match preconditioner dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+        assert_eq!(
+            out.nrows(),
+            self.n,
+            "out row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            rhs.nrows(),
+            self.n,
+            "rhs row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
         out.copy_from(rhs);
         self.apply_blocks(out, Conj::Yes, false, par, stack);
     }
@@ -362,9 +396,21 @@ where
         par: Par,
         stack: &mut MemStack,
     ) {
-        assert_eq!(out.nrows(), self.n, "out row count must match preconditioner dimension");
-        assert_eq!(rhs.nrows(), self.n, "rhs row count must match preconditioner dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+        assert_eq!(
+            out.nrows(),
+            self.n,
+            "out row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            rhs.nrows(),
+            self.n,
+            "rhs row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
         out.copy_from(rhs);
         self.apply_blocks(out, Conj::No, true, par, stack);
     }
@@ -376,9 +422,21 @@ where
         par: Par,
         stack: &mut MemStack,
     ) {
-        assert_eq!(out.nrows(), self.n, "out row count must match preconditioner dimension");
-        assert_eq!(rhs.nrows(), self.n, "rhs row count must match preconditioner dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+        assert_eq!(
+            out.nrows(),
+            self.n,
+            "out row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            rhs.nrows(),
+            self.n,
+            "rhs row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
         out.copy_from(rhs);
         self.apply_blocks(out, Conj::Yes, true, par, stack);
     }
@@ -407,9 +465,8 @@ mod tests {
 
     use super::*;
     use faer::{
-        mat,
+        Mat, MatRef, mat,
         matrix_free::{BiLinOp, LinOp, Precond},
-        Mat, MatRef,
     };
 
     fn with_stack(req: StackReq, f: impl FnOnce(&mut MemStack)) {
@@ -460,7 +517,10 @@ mod tests {
     fn rejects_non_square() {
         let a = Mat::<f64>::from_fn(3, 4, |i, j| (i + j) as f64);
         let err = BlockJacobiPrecond::try_new(a.as_ref(), &[0, 3]).unwrap_err();
-        assert_eq!(err, BlockJacobiError::NonSquareMatrix { nrows: 3, ncols: 4 });
+        assert_eq!(
+            err,
+            BlockJacobiError::NonSquareMatrix { nrows: 3, ncols: 4 }
+        );
     }
 
     #[test]
@@ -562,13 +622,7 @@ mod tests {
         ];
         let pc = BlockJacobiPrecond::try_new(a.as_ref(), &[0, 2, 5]).unwrap();
 
-        let x = mat![
-            [1.0],
-            [2.0],
-            [3.0],
-            [-1.0],
-            [0.5_f64],
-        ];
+        let x = mat![[1.0], [2.0], [3.0], [-1.0], [0.5_f64],];
         let b = a.transpose() * &x;
 
         let mut out = Mat::<f64>::zeros(5, 1);
@@ -583,13 +637,7 @@ mod tests {
         let a = test_matrix();
         let pc = BlockJacobiPrecond::try_new(a.as_ref(), &[0, 2, 5]).unwrap();
 
-        let rhs = mat![
-            [1.0],
-            [-2.0],
-            [3.0],
-            [4.0],
-            [-1.0_f64],
-        ];
+        let rhs = mat![[1.0], [-2.0], [3.0], [4.0], [-1.0_f64],];
 
         let mut out_t = Mat::<f64>::zeros(5, 1);
         with_stack(pc.transpose_apply_scratch(rhs.ncols(), Par::Seq), |stack| {
@@ -605,18 +653,10 @@ mod tests {
     #[test]
     fn single_block_matches_full_lu() {
         // One big block == applying A^{-1} via partial-pivoted LU.
-        let a = mat![
-            [4.0, 1.0, 2.0],
-            [3.0, 5.0, 1.0],
-            [1.0, 2.0, 6.0_f64],
-        ];
+        let a = mat![[4.0, 1.0, 2.0], [3.0, 5.0, 1.0], [1.0, 2.0, 6.0_f64],];
         let pc = BlockJacobiPrecond::try_new(a.as_ref(), &[0, 3]).unwrap();
 
-        let x = mat![
-            [1.0],
-            [2.0],
-            [3.0_f64],
-        ];
+        let x = mat![[1.0], [2.0], [3.0_f64],];
         let b = &a * &x;
 
         let mut out = Mat::<f64>::zeros(3, 1);

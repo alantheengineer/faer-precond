@@ -4,8 +4,8 @@ use faer::sparse::SparseColMatRef;
 use faer_traits::math_utils::{abs2, copy, mul, one, recip, sub, zero};
 use faer_traits::{ComplexField, Index};
 
-use super::symbolic::SymbolicIlu0;
 use super::Ilu0Error;
+use super::symbolic::SymbolicIlu0;
 
 /// Numeric ILU(0) factor of a CSC matrix `A`.
 ///

@@ -1,14 +1,14 @@
 use core::mem::MaybeUninit;
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use dyn_stack::{MemStack, StackReq};
 use faer::{
+    Mat, Par, Side,
     linalg::solvers::Llt,
-    matrix_free::{Precond, LinOp},
-    Mat, Side, Par,
+    matrix_free::{LinOp, Precond},
 };
-use faer_precond::{jacobi::JacobiPrecond, SolvePrecond};
+use faer_precond::{SolvePrecond, jacobi::JacobiPrecond};
 
 fn with_stack(req: StackReq, f: impl FnOnce(&mut MemStack)) {
     let nbytes = req.unaligned_bytes_required().max(1);
@@ -97,7 +97,12 @@ fn bench_jacobi_out_of_place(c: &mut Criterion) {
     group.bench_function("f64/2048x8", |b| {
         b.iter(|| {
             with_stack(pc.apply_scratch(rhs_ncols, Par::Seq), |stack| {
-                pc.apply(black_box(out.as_mut()), black_box(rhs.as_ref()), Par::Seq, stack);
+                pc.apply(
+                    black_box(out.as_mut()),
+                    black_box(rhs.as_ref()),
+                    Par::Seq,
+                    stack,
+                );
             });
             black_box(&out);
         });

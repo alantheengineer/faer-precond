@@ -4,8 +4,8 @@ use faer::sparse::SparseColMatRef;
 use faer_traits::math_utils::{conj, copy, from_real, mul, real, recip, sqrt, sub, zero};
 use faer_traits::{ComplexField, Index};
 
-use super::symbolic::SymbolicIc0;
 use super::Ic0Error;
+use super::symbolic::SymbolicIc0;
 
 /// Numeric IC(0) factor of a Hermitian positive-definite CSC matrix `A`.
 ///

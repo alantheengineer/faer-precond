@@ -2,9 +2,9 @@ use core::fmt::Debug;
 
 use dyn_stack::{MemStack, StackReq};
 use faer::{
+    Conj, MatMut, MatRef, Par,
     linalg::solvers::{ShapeCore, SolveCore},
     matrix_free::{BiLinOp, BiPrecond, LinOp, Precond},
-    Conj, MatMut, MatRef, Par,
 };
 use faer_traits::ComplexField;
 
@@ -44,16 +44,22 @@ where
         self.solver.ncols()
     }
 
-    fn apply(
-        &self,
-        mut out: MatMut<'_, T>,
-        rhs: MatRef<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
-        assert_eq!(rhs.nrows(), self.ncols(), "rhs row count must match operator input dimension");
-        assert_eq!(out.nrows(), self.nrows(), "out row count must match operator output dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+    fn apply(&self, mut out: MatMut<'_, T>, rhs: MatRef<'_, T>, _par: Par, _stack: &mut MemStack) {
+        assert_eq!(
+            rhs.nrows(),
+            self.ncols(),
+            "rhs row count must match operator input dimension"
+        );
+        assert_eq!(
+            out.nrows(),
+            self.nrows(),
+            "out row count must match operator output dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
 
         out.copy_from(rhs);
         self.solver.solve_in_place_with_conj(Conj::No, out);
@@ -66,9 +72,21 @@ where
         _par: Par,
         _stack: &mut MemStack,
     ) {
-        assert_eq!(rhs.nrows(), self.ncols(), "rhs row count must match operator input dimension");
-        assert_eq!(out.nrows(), self.nrows(), "out row count must match operator output dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+        assert_eq!(
+            rhs.nrows(),
+            self.ncols(),
+            "rhs row count must match operator input dimension"
+        );
+        assert_eq!(
+            out.nrows(),
+            self.nrows(),
+            "out row count must match operator output dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
 
         out.copy_from(rhs);
         self.solver.solve_in_place_with_conj(Conj::Yes, out);
@@ -84,21 +102,11 @@ where
         StackReq::EMPTY
     }
 
-    fn apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.solver.solve_in_place_with_conj(Conj::No, rhs);
     }
 
-    fn conj_apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn conj_apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.solver.solve_in_place_with_conj(Conj::Yes, rhs);
     }
 }
@@ -119,12 +127,25 @@ where
         _par: Par,
         _stack: &mut MemStack,
     ) {
-        assert_eq!(rhs.nrows(), self.ncols(), "rhs row count must match operator input dimension");
-        assert_eq!(out.nrows(), self.nrows(), "out row count must match operator output dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+        assert_eq!(
+            rhs.nrows(),
+            self.ncols(),
+            "rhs row count must match operator input dimension"
+        );
+        assert_eq!(
+            out.nrows(),
+            self.nrows(),
+            "out row count must match operator output dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
 
         out.copy_from(rhs);
-        self.solver.solve_transpose_in_place_with_conj(Conj::No, out);
+        self.solver
+            .solve_transpose_in_place_with_conj(Conj::No, out);
     }
 
     fn adjoint_apply(
@@ -134,12 +155,25 @@ where
         _par: Par,
         _stack: &mut MemStack,
     ) {
-        assert_eq!(rhs.nrows(), self.ncols(), "rhs row count must match operator input dimension");
-        assert_eq!(out.nrows(), self.nrows(), "out row count must match operator output dimension");
-        assert_eq!(out.ncols(), rhs.ncols(), "out and rhs must have the same number of columns");
+        assert_eq!(
+            rhs.nrows(),
+            self.ncols(),
+            "rhs row count must match operator input dimension"
+        );
+        assert_eq!(
+            out.nrows(),
+            self.nrows(),
+            "out row count must match operator output dimension"
+        );
+        assert_eq!(
+            out.ncols(),
+            rhs.ncols(),
+            "out and rhs must have the same number of columns"
+        );
 
         out.copy_from(rhs);
-        self.solver.solve_transpose_in_place_with_conj(Conj::Yes, out);
+        self.solver
+            .solve_transpose_in_place_with_conj(Conj::Yes, out);
     }
 }
 
@@ -152,22 +186,14 @@ where
         StackReq::EMPTY
     }
 
-    fn transpose_apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
-        self.solver.solve_transpose_in_place_with_conj(Conj::No, rhs);
+    fn transpose_apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
+        self.solver
+            .solve_transpose_in_place_with_conj(Conj::No, rhs);
     }
 
-    fn adjoint_apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
-        self.solver.solve_transpose_in_place_with_conj(Conj::Yes, rhs);
+    fn adjoint_apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
+        self.solver
+            .solve_transpose_in_place_with_conj(Conj::Yes, rhs);
     }
 }
 
@@ -177,8 +203,9 @@ mod tests {
 
     use super::*;
     use faer::{
+        Mat, MatRef, Side,
         linalg::solvers::Llt,
-        mat, Mat, MatRef, Side,
+        mat,
         matrix_free::{BiLinOp, BiPrecond, LinOp, Precond},
     };
 
@@ -206,10 +233,7 @@ mod tests {
     }
 
     fn test_solver() -> SolvePrecond<Llt<f64>> {
-        let a = mat![
-            [4.0, 1.0],
-            [1.0, 3.0f64],
-        ];
+        let a = mat![[4.0, 1.0], [1.0, 3.0f64],];
         let llt = Llt::new(a.as_ref(), Side::Lower).expect("matrix should be SPD");
         SolvePrecond::new(llt)
     }
@@ -224,30 +248,21 @@ mod tests {
     #[test]
     fn apply_solves_system() {
         let pc = test_solver();
-        let rhs = mat![
-            [1.0],
-            [2.0f64],
-        ];
+        let rhs = mat![[1.0], [2.0f64],];
         let mut out = Mat::<f64>::zeros(2, 1);
 
         with_stack(pc.apply_scratch(rhs.ncols(), Par::Seq), |stack| {
             pc.apply(out.as_mut(), rhs.as_ref(), Par::Seq, stack);
         });
 
-        let expected = mat![
-            [1.0 / 11.0],
-            [7.0 / 11.0f64],
-        ];
+        let expected = mat![[1.0 / 11.0], [7.0 / 11.0f64],];
         assert_close(out.as_ref(), expected.as_ref(), 1e-12);
     }
 
     #[test]
     fn apply_in_place_matches_apply() {
         let pc = test_solver();
-        let rhs = mat![
-            [1.0],
-            [2.0f64],
-        ];
+        let rhs = mat![[1.0], [2.0f64],];
 
         let mut out = Mat::<f64>::zeros(2, 1);
         with_stack(pc.apply_scratch(rhs.ncols(), Par::Seq), |stack| {
@@ -255,9 +270,12 @@ mod tests {
         });
 
         let mut inplace = rhs.to_owned();
-        with_stack(pc.apply_in_place_scratch(inplace.ncols(), Par::Seq), |stack| {
-            pc.apply_in_place(inplace.as_mut(), Par::Seq, stack);
-        });
+        with_stack(
+            pc.apply_in_place_scratch(inplace.ncols(), Par::Seq),
+            |stack| {
+                pc.apply_in_place(inplace.as_mut(), Par::Seq, stack);
+            },
+        );
 
         assert_close(out.as_ref(), inplace.as_ref(), 1e-12);
     }
@@ -265,40 +283,28 @@ mod tests {
     #[test]
     fn transpose_apply_is_usable() {
         let pc = test_solver();
-        let rhs = mat![
-            [1.0],
-            [2.0f64],
-        ];
+        let rhs = mat![[1.0], [2.0f64],];
         let mut out = Mat::<f64>::zeros(2, 1);
 
         with_stack(pc.transpose_apply_scratch(rhs.ncols(), Par::Seq), |stack| {
             pc.transpose_apply(out.as_mut(), rhs.as_ref(), Par::Seq, stack);
         });
 
-        let expected = mat![
-            [1.0 / 11.0],
-            [7.0 / 11.0f64],
-        ];
+        let expected = mat![[1.0 / 11.0], [7.0 / 11.0f64],];
         assert_close(out.as_ref(), expected.as_ref(), 1e-12);
     }
 
     #[test]
     fn adjoint_apply_is_usable() {
         let pc = test_solver();
-        let rhs = mat![
-            [1.0],
-            [2.0f64],
-        ];
+        let rhs = mat![[1.0], [2.0f64],];
         let mut out = Mat::<f64>::zeros(2, 1);
 
         with_stack(pc.transpose_apply_scratch(rhs.ncols(), Par::Seq), |stack| {
             pc.adjoint_apply(out.as_mut(), rhs.as_ref(), Par::Seq, stack);
         });
 
-        let expected = mat![
-            [1.0 / 11.0],
-            [7.0 / 11.0f64],
-        ];
+        let expected = mat![[1.0 / 11.0], [7.0 / 11.0f64],];
         assert_close(out.as_ref(), expected.as_ref(), 1e-12);
     }
 
@@ -306,26 +312,23 @@ mod tests {
     fn transpose_and_adjoint_in_place_are_usable() {
         let pc = test_solver();
 
-        let mut rhs_t = mat![
-            [1.0],
-            [2.0f64],
-        ];
-        with_stack(pc.transpose_apply_in_place_scratch(rhs_t.ncols(), Par::Seq), |stack| {
-            pc.transpose_apply_in_place(rhs_t.as_mut(), Par::Seq, stack);
-        });
+        let mut rhs_t = mat![[1.0], [2.0f64],];
+        with_stack(
+            pc.transpose_apply_in_place_scratch(rhs_t.ncols(), Par::Seq),
+            |stack| {
+                pc.transpose_apply_in_place(rhs_t.as_mut(), Par::Seq, stack);
+            },
+        );
 
-        let mut rhs_h = mat![
-            [1.0],
-            [2.0f64],
-        ];
-        with_stack(pc.transpose_apply_in_place_scratch(rhs_h.ncols(), Par::Seq), |stack| {
-            pc.adjoint_apply_in_place(rhs_h.as_mut(), Par::Seq, stack);
-        });
+        let mut rhs_h = mat![[1.0], [2.0f64],];
+        with_stack(
+            pc.transpose_apply_in_place_scratch(rhs_h.ncols(), Par::Seq),
+            |stack| {
+                pc.adjoint_apply_in_place(rhs_h.as_mut(), Par::Seq, stack);
+            },
+        );
 
-        let expected = mat![
-            [1.0 / 11.0],
-            [7.0 / 11.0f64],
-        ];
+        let expected = mat![[1.0 / 11.0], [7.0 / 11.0f64],];
         assert_close(rhs_t.as_ref(), expected.as_ref(), 1e-12);
         assert_close(rhs_h.as_ref(), expected.as_ref(), 1e-12);
     }

@@ -193,7 +193,7 @@ where
 mod tests {
     use super::*;
     use faer::sparse::{SparseColMat, SparseColMatRef, Triplet};
-    use faer::{mat, Mat, MatRef};
+    use faer::{Mat, MatRef, mat};
 
     fn assert_close(lhs: MatRef<'_, f64>, rhs: MatRef<'_, f64>, tol: f64) {
         assert_eq!(lhs.nrows(), rhs.nrows());
@@ -329,8 +329,17 @@ mod tests {
 
         let residual = &a_dense * &x - &b;
         let b_norm: f64 = b.as_ref().col(0).iter().map(|v| v * v).sum::<f64>().sqrt();
-        let r_norm: f64 = residual.as_ref().col(0).iter().map(|v| v * v).sum::<f64>().sqrt();
-        assert!(r_norm / b_norm < 0.5, "IC(0) residual ratio {r_norm}/{b_norm} too large");
+        let r_norm: f64 = residual
+            .as_ref()
+            .col(0)
+            .iter()
+            .map(|v| v * v)
+            .sum::<f64>()
+            .sqrt();
+        assert!(
+            r_norm / b_norm < 0.5,
+            "IC(0) residual ratio {r_norm}/{b_norm} too large"
+        );
     }
 
     #[test]
@@ -400,10 +409,7 @@ mod tests {
     #[test]
     fn rejects_indefinite_matrix() {
         // A = diag(1, -1) is not positive definite.
-        let triplets = vec![
-            Triplet::new(0, 0, 1.0),
-            Triplet::new(1, 1, -1.0_f64),
-        ];
+        let triplets = vec![Triplet::new(0, 0, 1.0), Triplet::new(1, 1, -1.0_f64)];
         let a = SparseColMat::<usize, f64>::try_new_from_triplets(2, 2, &triplets).unwrap();
         let err = Ic0::try_new(a.as_ref()).unwrap_err();
         assert_eq!(err, Ic0Error::NotPositiveDefinite { col: 1 });

@@ -2,9 +2,9 @@ use core::fmt::Debug;
 
 use dyn_stack::{MemStack, StackReq};
 use faer::{
+    MatMut, MatRef, Par,
     matrix_free::{BiLinOp, BiPrecond, LinOp, Precond},
     prelude::ReborrowMut,
-    MatMut, MatRef, Par,
 };
 use faer_traits::ComplexField;
 use faer_traits::math_utils::{abs2, conj, copy, mul, recip, zero};
@@ -70,9 +70,20 @@ impl<T: ComplexField> JacobiPrecond<T> {
 
     #[inline]
     fn check_dims(&self, out_nrows: usize, rhs_nrows: usize, rhs_ncols: usize, out_ncols: usize) {
-        assert_eq!(rhs_nrows, self.dim(), "rhs row count must match preconditioner dimension");
-        assert_eq!(out_nrows, self.dim(), "out row count must match preconditioner dimension");
-        assert_eq!(out_ncols, rhs_ncols, "out and rhs must have the same number of columns");
+        assert_eq!(
+            rhs_nrows,
+            self.dim(),
+            "rhs row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            out_nrows,
+            self.dim(),
+            "out row count must match preconditioner dimension"
+        );
+        assert_eq!(
+            out_ncols, rhs_ncols,
+            "out and rhs must have the same number of columns"
+        );
     }
 
     #[inline]
@@ -93,7 +104,11 @@ impl<T: ComplexField> JacobiPrecond<T> {
 
     #[inline]
     fn apply_scale_in_place(&self, mut rhs: MatMut<'_, T>, conjugate_diag: bool) {
-        assert_eq!(rhs.nrows(), self.dim(), "rhs row count must match preconditioner dimension");
+        assert_eq!(
+            rhs.nrows(),
+            self.dim(),
+            "rhs row count must match preconditioner dimension"
+        );
 
         for j in 0..rhs.ncols() {
             for i in 0..rhs.nrows() {
@@ -125,23 +140,11 @@ where
         self.dim()
     }
 
-    fn apply(
-        &self,
-        out: MatMut<'_, T>,
-        rhs: MatRef<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn apply(&self, out: MatMut<'_, T>, rhs: MatRef<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.apply_scale_to_out(out, rhs, false);
     }
 
-    fn conj_apply(
-        &self,
-        out: MatMut<'_, T>,
-        rhs: MatRef<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn conj_apply(&self, out: MatMut<'_, T>, rhs: MatRef<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.apply_scale_to_out(out, rhs, true);
     }
 }
@@ -154,21 +157,11 @@ where
         StackReq::EMPTY
     }
 
-    fn apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.apply_scale_in_place(rhs, false);
     }
 
-    fn conj_apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn conj_apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.apply_scale_in_place(rhs, true);
     }
 }
@@ -212,21 +205,11 @@ where
         StackReq::EMPTY
     }
 
-    fn transpose_apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn transpose_apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.apply_scale_in_place(rhs, false);
     }
 
-    fn adjoint_apply_in_place(
-        &self,
-        rhs: MatMut<'_, T>,
-        _par: Par,
-        _stack: &mut MemStack,
-    ) {
+    fn adjoint_apply_in_place(&self, rhs: MatMut<'_, T>, _par: Par, _stack: &mut MemStack) {
         self.apply_scale_in_place(rhs, true);
     }
 }
@@ -237,7 +220,7 @@ mod tests {
 
     use super::*;
     use faer::{
-        mat, Mat, MatRef,
+        Mat, MatRef, mat,
         matrix_free::{BiLinOp, BiPrecond, LinOp, Precond},
     };
 
@@ -279,11 +262,7 @@ mod tests {
 
     #[test]
     fn builds_from_matrix_diagonal() {
-        let a = mat![
-            [2.0, 9.0, 0.0],
-            [1.0, 4.0, 5.0],
-            [0.0, 7.0, 8.0f64],
-        ];
+        let a = mat![[2.0, 9.0, 0.0], [1.0, 4.0, 5.0], [0.0, 7.0, 8.0f64],];
 
         let pc = JacobiPrecond::try_from_matrix_diagonal(a.as_ref()).unwrap();
         assert_eq!(pc.inverse_diagonal(), &[0.5, 0.25, 0.125]);
@@ -292,10 +271,7 @@ mod tests {
     #[test]
     fn apply_matches_expected_multiple_rhs() {
         let pc = JacobiPrecond::try_from_diagonal(&[2.0, 4.0]).unwrap();
-        let rhs = mat![
-            [2.0, 8.0],
-            [4.0, 12.0f64],
-        ];
+        let rhs = mat![[2.0, 8.0], [4.0, 12.0f64],];
         let mut out = Mat::<f64>::zeros(2, 2);
 
         let req = pc.apply_scratch(rhs.ncols(), Par::Seq);
@@ -303,20 +279,14 @@ mod tests {
             pc.apply(out.as_mut(), rhs.as_ref(), Par::Seq, stack);
         });
 
-        let expected = mat![
-            [1.0, 4.0],
-            [1.0, 3.0f64],
-        ];
+        let expected = mat![[1.0, 4.0], [1.0, 3.0f64],];
         assert_close(out.as_ref(), expected.as_ref(), 1e-12);
     }
 
     #[test]
     fn apply_in_place_matches_apply() {
         let pc = JacobiPrecond::try_from_diagonal(&[2.0, 4.0]).unwrap();
-        let rhs = mat![
-            [2.0, 8.0],
-            [4.0, 12.0f64],
-        ];
+        let rhs = mat![[2.0, 8.0], [4.0, 12.0f64],];
 
         let mut out = Mat::<f64>::zeros(2, 2);
         with_stack(pc.apply_scratch(rhs.ncols(), Par::Seq), |stack| {
@@ -324,9 +294,12 @@ mod tests {
         });
 
         let mut inplace = rhs.to_owned();
-        with_stack(pc.apply_in_place_scratch(inplace.ncols(), Par::Seq), |stack| {
-            pc.apply_in_place(inplace.as_mut(), Par::Seq, stack);
-        });
+        with_stack(
+            pc.apply_in_place_scratch(inplace.ncols(), Par::Seq),
+            |stack| {
+                pc.apply_in_place(inplace.as_mut(), Par::Seq, stack);
+            },
+        );
 
         assert_close(out.as_ref(), inplace.as_ref(), 1e-12);
     }
@@ -334,10 +307,7 @@ mod tests {
     #[test]
     fn transpose_and_adjoint_are_usable() {
         let pc = JacobiPrecond::try_from_diagonal(&[2.0, 4.0]).unwrap();
-        let rhs = mat![
-            [2.0],
-            [4.0f64],
-        ];
+        let rhs = mat![[2.0], [4.0f64],];
 
         let mut out_t = Mat::<f64>::zeros(2, 1);
         with_stack(pc.transpose_apply_scratch(rhs.ncols(), Par::Seq), |stack| {
@@ -349,10 +319,7 @@ mod tests {
             pc.adjoint_apply(out_h.as_mut(), rhs.as_ref(), Par::Seq, stack);
         });
 
-        let expected = mat![
-            [1.0],
-            [1.0f64],
-        ];
+        let expected = mat![[1.0], [1.0f64],];
         assert_close(out_t.as_ref(), expected.as_ref(), 1e-12);
         assert_close(out_h.as_ref(), expected.as_ref(), 1e-12);
     }
@@ -361,26 +328,23 @@ mod tests {
     fn transpose_and_adjoint_in_place_are_usable() {
         let pc = JacobiPrecond::try_from_diagonal(&[2.0, 4.0]).unwrap();
 
-        let mut rhs_t = mat![
-            [2.0],
-            [4.0f64],
-        ];
-        with_stack(pc.transpose_apply_in_place_scratch(rhs_t.ncols(), Par::Seq), |stack| {
-            pc.transpose_apply_in_place(rhs_t.as_mut(), Par::Seq, stack);
-        });
+        let mut rhs_t = mat![[2.0], [4.0f64],];
+        with_stack(
+            pc.transpose_apply_in_place_scratch(rhs_t.ncols(), Par::Seq),
+            |stack| {
+                pc.transpose_apply_in_place(rhs_t.as_mut(), Par::Seq, stack);
+            },
+        );
 
-        let mut rhs_h = mat![
-            [2.0],
-            [4.0f64],
-        ];
-        with_stack(pc.transpose_apply_in_place_scratch(rhs_h.ncols(), Par::Seq), |stack| {
-            pc.adjoint_apply_in_place(rhs_h.as_mut(), Par::Seq, stack);
-        });
+        let mut rhs_h = mat![[2.0], [4.0f64],];
+        with_stack(
+            pc.transpose_apply_in_place_scratch(rhs_h.ncols(), Par::Seq),
+            |stack| {
+                pc.adjoint_apply_in_place(rhs_h.as_mut(), Par::Seq, stack);
+            },
+        );
 
-        let expected = mat![
-            [1.0],
-            [1.0f64],
-        ];
+        let expected = mat![[1.0], [1.0f64],];
         assert_close(rhs_t.as_ref(), expected.as_ref(), 1e-12);
         assert_close(rhs_h.as_ref(), expected.as_ref(), 1e-12);
     }

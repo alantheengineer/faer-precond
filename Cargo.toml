@@ -2,6 +2,22 @@
 name = "faer-precond"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+description = "Numerical preconditioners (Jacobi, block-Jacobi, ILU(0), IC(0)) for iterative solvers, built on faer."
+documentation = "https://docs.rs/faer-precond"
+homepage = "https://github.com/alantheengineer/faer-precond"
+repository = "https://github.com/alantheengineer/faer-precond"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["linear-algebra", "preconditioner", "sparse", "numerical", "faer"]
+categories = ["mathematics", "science", "algorithms"]
+exclude = [
+    "target/*",
+]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 faer = "0.24"
