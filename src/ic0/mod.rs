@@ -1,7 +1,14 @@
 //! Zero-fill incomplete Cholesky preconditioner.
 //!
-//! Given a Hermitian positive-definite CSC matrix `A`, [`Ic0::try_new`]
-//! computes a lower-triangular factor `L` such that:
+//! IC(0) is the standard preconditioner for symmetric positive-definite sparse
+//! systems solved with conjugate gradient — Laplacians, diffusion, elasticity
+//! and similar discretised PDE operators. It is the symmetric specialisation of
+//! [`crate::Ilu0`]: a Cholesky factorisation constrained to `A`'s own sparsity
+//! pattern, so it adds no fill-in, takes no more memory than the lower triangle
+//! of `A`, and is cheap to rebuild.
+//!
+//! Concretely, [`Ic0::try_new`] computes a lower-triangular factor `L` such
+//! that:
 //!
 //! - `pattern(L)` equals the *lower triangular* subset of `pattern(A)`
 //!   (no fill-in),
@@ -9,12 +16,8 @@
 //!   diagonal.
 //!
 //! Only the lower triangle of the input matrix is used — entries above the
-//! diagonal are silently ignored, so the same `SparseColMat` storing a full
-//! Hermitian matrix or just its lower triangle is accepted.
-//!
-//! `L` is stored CSC with its diagonal *first* in each column, matching
-//! [`faer::sparse::linalg::triangular_solve`]. Apply uses faer's sparse
-//! triangular solves directly and allocates no heap memory.
+//! diagonal are ignored, so a `SparseColMat` storing either the full Hermitian
+//! matrix or just its lower triangle is accepted.
 //!
 //! # Repeated factorisation
 //!
@@ -48,6 +51,12 @@
 //! let mut b = mat![[1.0_f64], [0.0], [0.0], [0.0], [0.0]];
 //! pc.apply_in_place(b.as_mut(), Par::Seq, MemStack::new(&mut []));
 //! ```
+//!
+//! # Storage
+//!
+//! `L` is stored CSC with its diagonal *first* in each column, matching
+//! [`faer::sparse::linalg::triangular_solve`]. Apply uses faer's sparse
+//! triangular solves directly and allocates no heap memory.
 
 use core::fmt::Debug;
 

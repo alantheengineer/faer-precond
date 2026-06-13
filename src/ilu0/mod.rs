@@ -1,16 +1,18 @@
 //! Zero-fill incomplete LU preconditioner.
 //!
-//! Given a sparse CSC matrix `A`, [`Ilu0::try_new`] computes the unique
-//! factors `L` (unit lower) and `U` (upper) such that:
+//! ILU(0) is the general-purpose workhorse for nonsymmetric sparse systems
+//! solved with GMRES or BiCGSTAB. It approximates `A` by an LU factorisation
+//! constrained to `A`'s own sparsity pattern: no fill-in is allowed, so the
+//! factors take no more memory than `A` and are cheap to build. That
+//! approximation is enough to cut Krylov iteration counts substantially on most
+//! discretised PDE operators. (For symmetric positive-definite `A`, use
+//! [`crate::Ic0`] instead — it is the cheaper symmetric specialisation.)
+//!
+//! Concretely, [`Ilu0::try_new`] computes the unique factors `L` (unit lower)
+//! and `U` (upper) such that:
 //!
 //! - `pattern(L) ∪ pattern(U) = pattern(A)` (no fill-in),
 //! - `L * U` agrees with `A` at every entry in `pattern(A)`.
-//!
-//! The factors are stored in column-compressed (CSC) form following faer's
-//! sparse triangular-solve conventions — `L`'s unit diagonal stored *first* in
-//! each column and `U`'s diagonal stored *last*. Apply uses
-//! [`faer::sparse::linalg::triangular_solve`] directly and allocates no heap
-//! memory.
 //!
 //! # Repeated factorisation
 //!
@@ -46,6 +48,14 @@
 //! let mut b = mat![[1.0_f64], [0.0], [0.0], [0.0], [0.0]];
 //! pc.apply_in_place(b.as_mut(), Par::Seq, MemStack::new(&mut []));
 //! ```
+//!
+//! # Storage
+//!
+//! The factors are stored in column-compressed (CSC) form following faer's
+//! sparse triangular-solve conventions — `L`'s unit diagonal stored *first* in
+//! each column and `U`'s diagonal stored *last*. Apply uses
+//! [`faer::sparse::linalg::triangular_solve`] directly and allocates no heap
+//! memory.
 
 use core::fmt::Debug;
 

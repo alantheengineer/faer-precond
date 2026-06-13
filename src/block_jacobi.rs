@@ -1,6 +1,13 @@
 //! Block-Jacobi preconditioner.
 //!
-//! `M = blkdiag(A_1, ..., A_p)` where each `A_k` is the dense diagonal block
+//! Block-Jacobi generalises point-Jacobi from single diagonal entries to dense
+//! diagonal *blocks*. Reach for it when the unknowns fall into small,
+//! tightly-coupled groups — several fields per mesh node, coupled species, or
+//! any problem whose strong coupling is local and block-structured. Inverting
+//! each block exactly captures that coupling, which plain diagonal scaling
+//! cannot.
+//!
+//! `M = blkdiag(A_1, ..., A_p)`, where each `A_k` is the dense diagonal block
 //! `A[off_k..off_{k+1}, off_k..off_{k+1}]` of the source matrix. Each block is
 //! factored with partial-pivoted LU once at construction; subsequent applies
 //! are pure dense triangular solves and contain no heap allocation.
