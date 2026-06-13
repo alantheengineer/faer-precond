@@ -15,6 +15,35 @@
 //! | [`Ic0`] | CSC lower triangle of `A` | `O(nnz_L)` | Zero-fill incomplete Cholesky for HPD `A`. |
 //! | [`SolvePrecond`] | any faer factorisation (`Llt`, `Lu`, `Qr`, ...) | factorisation-dependent | Adapter, not a factorisation. |
 //!
+//! # Choosing a preconditioner
+//!
+//! There is no single best preconditioner; the right one depends on the
+//! structure of `A` and how much work you can afford per iteration.
+//!
+//! - **Start with [`JacobiPrecond`].** It is almost free to build and apply,
+//!   and it helps whenever `A`'s rows differ in scale — diagonally dominant
+//!   systems, variable-coefficient PDEs, badly-scaled unknowns. If `A` has a
+//!   constant diagonal it does nothing, so move on.
+//! - **[`Ic0`] for symmetric positive-definite `A`.** The standard choice for
+//!   SPD problems from PDE discretisations (Laplacians, diffusion, elasticity)
+//!   solved with conjugate gradient. It cuts iteration counts sharply; each
+//!   apply costs two sparse triangular solves, so it always wins on iteration
+//!   count and wins on wall-clock time once the problem is ill-conditioned
+//!   enough to need many iterations.
+//! - **[`Ilu0`] for general (nonsymmetric) sparse `A`.** The nonsymmetric
+//!   counterpart to IC(0), paired with GMRES or BiCGSTAB. Same zero-fill idea:
+//!   cheap to build and stores nothing beyond `A`'s sparsity pattern.
+//! - **[`BlockJacobiPrecond`] when unknowns cluster into small dense groups.**
+//!   Several fields per mesh node, coupled species, or tightly-coupled
+//!   sub-systems. Inverting those blocks exactly captures the strong local
+//!   coupling that point-Jacobi misses.
+//! - **[`SolvePrecond`] to reuse an exact factorisation.** Factorise a cheaper
+//!   approximation of `A` once and let the Krylov method correct the rest.
+//!
+//! When `A`'s values change between iterations but its sparsity pattern does
+//! not — the inner loop of a nonlinear solver — build the symbolic factor once
+//! and call `refactorize` (see [`Ilu0`] and [`Ic0`]) to avoid reallocating.
+//!
 //! # Design contract
 //!
 //! - **No heap allocation during `apply`.** Every preconditioner returns

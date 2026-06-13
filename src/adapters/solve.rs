@@ -1,3 +1,27 @@
+//! Use an exact factorisation as a preconditioner.
+//!
+//! [`SolvePrecond`] wraps any faer factorisation implementing `SolveCore`
+//! (`Llt`, `Ldlt`, `Lu`, `Qr`, ...) and exposes it through the preconditioner
+//! traits. Each apply is a forward/back substitution against the stored
+//! factors, so "apply the preconditioner" becomes "solve with this
+//! factorisation".
+//!
+//! # When to use it
+//!
+//! This is an *adapter*, not a factorisation method — it does no incomplete or
+//! approximate work of its own. The useful pattern is to factorise something
+//! *cheaper than the full `A`* and precondition `A` with it:
+//!
+//! - a lower-fidelity discretisation of the same problem,
+//! - a frozen- or averaged-coefficient version of `A`,
+//! - a single dominant block of a larger system,
+//! - or any factorisation you already have lying around for another reason.
+//!
+//! The Krylov method then only has to correct for whatever the approximation
+//! left out. (Factorising the *full* `A` exactly and preconditioning `A` with
+//! it converges in one step — but then you may as well have called the solver
+//! directly.)
+
 use core::fmt::Debug;
 
 use dyn_stack::{MemStack, StackReq};
@@ -8,20 +32,27 @@ use faer::{
 };
 use faer_traits::ComplexField;
 
+/// Adapter exposing a faer factorisation `S` as a preconditioner.
+///
+/// See the [module documentation](self) for the intended use. `S` is any
+/// factorisation implementing `SolveCore` (`Llt`, `Ldlt`, `Lu`, `Qr`, ...).
 #[derive(Debug, Clone)]
 pub struct SolvePrecond<S> {
     solver: S,
 }
 
 impl<S> SolvePrecond<S> {
+    /// Wrap a factorisation as a preconditioner.
     pub fn new(solver: S) -> Self {
         Self { solver }
     }
 
+    /// Borrow the wrapped factorisation.
     pub fn inner(&self) -> &S {
         &self.solver
     }
 
+    /// Unwrap and return the factorisation.
     pub fn into_inner(self) -> S {
         self.solver
     }

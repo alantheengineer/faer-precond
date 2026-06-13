@@ -17,6 +17,34 @@ faer's Krylov solvers (CG, GMRES, BiCGSTAB, LSMR, ...).
 | `Ic0<I, T>` | Zero-fill incomplete Cholesky on a CSC Hermitian PD matrix | ✅ |
 | `SolvePrecond<S>` | Adapter wrapping any faer `SolveCore` factorisation (`Llt`, `Lu`, `Qr`, ...) | ✅ |
 
+## Choosing a preconditioner
+
+There is no single best preconditioner; the right one depends on the structure
+of `A` and how much work you can afford per iteration.
+
+- **Start with `JacobiPrecond`.** Almost free to build and apply. It helps
+  whenever `A`'s rows differ in scale — diagonally dominant systems,
+  variable-coefficient PDEs, badly-scaled unknowns. If `A` has a constant
+  diagonal it does nothing, so move on.
+- **`Ic0` for symmetric positive-definite `A`.** The standard choice for SPD
+  problems from PDE discretisations (Laplacians, diffusion, elasticity) solved
+  with conjugate gradient. It cuts iteration counts sharply; each apply is two
+  sparse triangular solves, so it always wins on iteration count and wins on
+  wall-clock time once the problem is ill-conditioned enough.
+- **`Ilu0` for general (nonsymmetric) sparse `A`.** The nonsymmetric
+  counterpart to IC(0), paired with GMRES or BiCGSTAB. Cheap to build, stores
+  nothing beyond `A`'s sparsity pattern.
+- **`BlockJacobiPrecond` when unknowns cluster into small dense groups.**
+  Several fields per mesh node, coupled species, tightly-coupled sub-systems.
+  Inverting those blocks exactly captures the strong local coupling point-Jacobi
+  misses.
+- **`SolvePrecond` to reuse an exact factorisation.** Factorise a cheaper
+  approximation of `A` once and let the Krylov method correct the rest.
+
+The `examples/speedup.rs` example measures all of this end-to-end on a
+badly-conditioned diffusion problem — run it with
+`cargo run --release --example speedup`.
+
 ## Design contract
 
 - **No heap allocation during `apply`.** Every `apply_scratch` returns either

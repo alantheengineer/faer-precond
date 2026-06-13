@@ -22,11 +22,29 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use faer::sparse::SparseColMat;
-//! use faer_precond::ilu0::Ilu0;
-//! let a: SparseColMat<usize, f64> = /* ... */;
+//! ```
+//! use dyn_stack::MemStack;
+//! use faer::sparse::{SparseColMat, Triplet};
+//! use faer::{mat, Par};
+//! use faer::matrix_free::Precond;
+//! use faer_precond::Ilu0;
+//!
+//! // 5x5 tridiagonal: diag 4, off-diagonals -1.
+//! let mut triplets = Vec::new();
+//! for i in 0..5 {
+//!     triplets.push(Triplet::new(i, i, 4.0_f64));
+//!     if i > 0 {
+//!         triplets.push(Triplet::new(i, i - 1, -1.0));
+//!         triplets.push(Triplet::new(i - 1, i, -1.0));
+//!     }
+//! }
+//! let a = SparseColMat::<usize, f64>::try_new_from_triplets(5, 5, &triplets).unwrap();
+//!
 //! let pc = Ilu0::try_new(a.as_ref()).expect("non-singular pattern");
+//!
+//! // Apply M^{-1} to a right-hand side in place.
+//! let mut b = mat![[1.0_f64], [0.0], [0.0], [0.0], [0.0]];
+//! pc.apply_in_place(b.as_mut(), Par::Seq, MemStack::new(&mut []));
 //! ```
 
 use core::fmt::Debug;

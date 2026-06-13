@@ -1,3 +1,24 @@
+//! Point-Jacobi (diagonal) preconditioner.
+//!
+//! The simplest preconditioner there is: `M = diag(A)`. Applying it divides
+//! each entry of the residual by the matching diagonal entry of `A`. There is
+//! no factorisation and no fill-in — construction inverts the diagonal once,
+//! and every apply is a single element-wise multiply, costing `O(n)`.
+//!
+//! # When to use it
+//!
+//! Jacobi helps only when the diagonal actually carries information about how
+//! the problem is scaled — that is, when `A` is diagonally dominant or its rows
+//! differ widely in magnitude. Variable-coefficient PDEs, reaction terms, and
+//! badly-scaled unknowns all fit. Because it costs almost nothing to build or
+//! apply, it is the natural first thing to try on any new system.
+//!
+//! It does **nothing** when the diagonal is constant: scaling every equation by
+//! the same number leaves the spectrum unchanged, so the iterative solver takes
+//! exactly as many steps as it would with no preconditioner. The constant-
+//! coefficient Laplacian is the textbook example. For those problems use
+//! [`crate::Ic0`] (symmetric) or [`crate::Ilu0`] (general) instead.
+
 use core::fmt::Debug;
 
 use dyn_stack::{MemStack, StackReq};
@@ -9,36 +30,56 @@ use faer::{
 use faer_traits::ComplexField;
 use faer_traits::math_utils::{abs2, conj, copy, mul, recip, zero};
 
+/// Error returned when building a [`JacobiPrecond`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JacobiError {
+    /// The source matrix was not square.
     NonSquareMatrix { nrows: usize, ncols: usize },
+    /// Diagonal entry `index` was zero, so it cannot be inverted.
     ZeroDiagonalEntry { index: usize },
 }
 
+/// Point-Jacobi preconditioner: `M^{-1} y = diag(A)^{-1} y`.
+///
+/// Stores the reciprocals of `A`'s diagonal and multiplies them into the
+/// right-hand side. Apply is `O(n)` and allocates nothing. See the
+/// [module documentation](self) for when this is the right choice.
 #[derive(Debug, Clone)]
 pub struct JacobiPrecond<T> {
     inv_diag: Vec<T>,
 }
 
 impl<T> JacobiPrecond<T> {
+    /// Build directly from the already-inverted diagonal `1 / diag(A)`.
+    ///
+    /// No checking is done — use this only when you have computed the
+    /// reciprocals yourself. Prefer [`Self::try_from_diagonal`] otherwise.
     pub fn from_inverse_diagonal(inv_diag: Vec<T>) -> Self {
         Self { inv_diag }
     }
 
+    /// The stored inverse diagonal, `1 / diag(A)`.
     pub fn inverse_diagonal(&self) -> &[T] {
         &self.inv_diag
     }
 
+    /// Dimension `n` of the preconditioner.
     pub fn dim(&self) -> usize {
         self.inv_diag.len()
     }
 
+    /// `true` if the preconditioner has dimension zero.
     pub fn is_empty(&self) -> bool {
         self.inv_diag.is_empty()
     }
 }
 
 impl<T: ComplexField> JacobiPrecond<T> {
+    /// Build from a slice holding the diagonal of `A`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JacobiError::ZeroDiagonalEntry`] if any entry is zero.
     pub fn try_from_diagonal(diag: &[T]) -> Result<Self, JacobiError> {
         let mut inv_diag = Vec::with_capacity(diag.len());
 
@@ -52,6 +93,12 @@ impl<T: ComplexField> JacobiPrecond<T> {
         Ok(Self { inv_diag })
     }
 
+    /// Build by reading the diagonal of a dense matrix `mat`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JacobiError::NonSquareMatrix`] if `mat` is not square, or
+    /// [`JacobiError::ZeroDiagonalEntry`] if any diagonal entry is zero.
     pub fn try_from_matrix_diagonal(mat: MatRef<'_, T>) -> Result<Self, JacobiError> {
         if mat.nrows() != mat.ncols() {
             return Err(JacobiError::NonSquareMatrix {
