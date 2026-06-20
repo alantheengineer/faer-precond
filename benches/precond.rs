@@ -14,7 +14,8 @@ use faer::{
     matrix_free::{LinOp, Precond},
 };
 use faer_precond::{
-    BlockJacobiPrecond, Ic0, Ilu0, Ilutp, JacobiPrecond, SolvePrecond, SymbolicIlu0,
+    BlockJacobiPrecond, Fsai, FsaiPattern, Ic0, Ict, Ilu0, Iluk, Ilutp, JacobiPrecond, Poly,
+    PolyKind, PolyParams, SolvePrecond, Spai, SpaiPattern, Ssor, SsorParams, SymbolicIlu0,
 };
 
 fn with_stack(req: StackReq, f: impl FnOnce(&mut MemStack)) {
@@ -451,8 +452,185 @@ fn bench_cg_solve(c: &mut Criterion) {
                 cg_solve(&a, &b, &pc);
             });
         });
+
+        group.bench_with_input(BenchmarkId::new("ssor", &label), &grid, |bch, _| {
+            bch.iter(|| {
+                let pc = Ssor::<usize, f64>::try_new(a.as_ref(), SsorParams { omega: 1.5 }).unwrap();
+                cg_solve(&a, &b, &pc);
+            });
+        });
+
+        group.bench_with_input(BenchmarkId::new("ict", &label), &grid, |bch, _| {
+            bch.iter(|| {
+                let pc = Ict::<usize, f64>::try_new(a.as_ref()).unwrap();
+                cg_solve(&a, &b, &pc);
+            });
+        });
+
+        group.bench_with_input(BenchmarkId::new("fsai", &label), &grid, |bch, _| {
+            bch.iter(|| {
+                let pc = Fsai::<usize, f64>::try_new(a.as_ref(), FsaiPattern::LowerOfPower {
+                    power: 2,
+                })
+                .unwrap();
+                cg_solve(&a, &b, &pc);
+            });
+        });
     }
 
+    group.finish();
+}
+
+fn bench_ssor_apply(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ssor_apply_in_place");
+    for &grid in &[16usize, 32, 64] {
+        let a = laplacian_2d(grid);
+        let n = a.nrows();
+        let pc = Ssor::<usize, f64>::try_new(a.as_ref(), SsorParams::default()).unwrap();
+        let template = Mat::from_fn(n, 1, |i, _| ((i % 17) as f64) - 5.0);
+        let mut rhs = template.clone();
+        group.bench_with_input(
+            BenchmarkId::new("laplacian2d_f64", format!("grid{grid}_n{n}")),
+            &grid,
+            |b, _| {
+                b.iter(|| {
+                    rhs.as_mut().copy_from(template.as_ref());
+                    with_stack(pc.apply_in_place_scratch(1, Par::Seq), |stack| {
+                        pc.apply_in_place(black_box(rhs.as_mut()), Par::Seq, stack);
+                    });
+                    black_box(&rhs);
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_poly_apply(c: &mut Criterion) {
+    let mut group = c.benchmark_group("poly_apply_in_place");
+    for &grid in &[16usize, 32, 64] {
+        let a = laplacian_2d(grid);
+        let n = a.nrows();
+        let pc = Poly::<usize, f64>::try_new(a.as_ref(), PolyParams {
+            degree: 8,
+            kind: PolyKind::Chebyshev {
+                lambda_min: 0.1,
+                lambda_max: 8.0,
+            },
+        })
+        .unwrap();
+        let template = Mat::from_fn(n, 1, |i, _| ((i % 17) as f64) - 5.0);
+        let mut rhs = template.clone();
+        group.bench_with_input(
+            BenchmarkId::new("chebyshev8_f64", format!("grid{grid}_n{n}")),
+            &grid,
+            |b, _| {
+                b.iter(|| {
+                    rhs.as_mut().copy_from(template.as_ref());
+                    with_stack(pc.apply_in_place_scratch(1, Par::Seq), |stack| {
+                        pc.apply_in_place(black_box(rhs.as_mut()), Par::Seq, stack);
+                    });
+                    black_box(&rhs);
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_iluk_symbolic(c: &mut Criterion) {
+    // The cost of the level-of-fill symbolic stage (vs ILU(0)'s zero-fill one).
+    let mut group = c.benchmark_group("iluk_symbolic");
+    for &grid in &[16usize, 32, 64] {
+        let a = laplacian_2d(grid);
+        let n = a.nrows();
+        for &level in &[0usize, 1, 2] {
+            group.bench_with_input(
+                BenchmarkId::new(format!("level{level}"), format!("grid{grid}_n{n}")),
+                &grid,
+                |b, _| {
+                    b.iter(|| {
+                        let pc = Iluk::<usize, f64>::try_new(black_box(a.as_ref()), level).unwrap();
+                        black_box(&pc);
+                    });
+                },
+            );
+        }
+    }
+    group.finish();
+}
+
+fn bench_ict_apply(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ict_apply_in_place");
+    for &grid in &[16usize, 32, 64] {
+        let a = laplacian_2d(grid);
+        let n = a.nrows();
+        let pc = Ict::<usize, f64>::try_new(a.as_ref()).unwrap();
+        let template = Mat::from_fn(n, 1, |i, _| ((i % 17) as f64) - 5.0);
+        let mut rhs = template.clone();
+        group.bench_with_input(
+            BenchmarkId::new("laplacian2d_f64", format!("grid{grid}_n{n}")),
+            &grid,
+            |b, _| {
+                b.iter(|| {
+                    rhs.as_mut().copy_from(template.as_ref());
+                    with_stack(pc.apply_in_place_scratch(1, Par::Seq), |stack| {
+                        pc.apply_in_place(black_box(rhs.as_mut()), Par::Seq, stack);
+                    });
+                    black_box(&rhs);
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_fsai(c: &mut Criterion) {
+    let mut group = c.benchmark_group("fsai");
+    for &grid in &[16usize, 32, 64] {
+        let a = laplacian_2d(grid);
+        let n = a.nrows();
+        let label = format!("grid{grid}_n{n}");
+
+        // Build cost (the per-row dense SPD solves).
+        group.bench_with_input(BenchmarkId::new("build", &label), &grid, |b, _| {
+            b.iter(|| {
+                let pc = Fsai::<usize, f64>::try_new(black_box(a.as_ref()), FsaiPattern::LowerOfA)
+                    .unwrap();
+                black_box(&pc);
+            });
+        });
+
+        // Apply cost (two sparse matvecs).
+        let pc = Fsai::<usize, f64>::try_new(a.as_ref(), FsaiPattern::LowerOfA).unwrap();
+        let template = Mat::from_fn(n, 1, |i, _| ((i % 17) as f64) - 5.0);
+        let mut rhs = template.clone();
+        group.bench_with_input(BenchmarkId::new("apply", &label), &grid, |b, _| {
+            b.iter(|| {
+                rhs.as_mut().copy_from(template.as_ref());
+                with_stack(pc.apply_in_place_scratch(1, Par::Seq), |stack| {
+                    pc.apply_in_place(black_box(rhs.as_mut()), Par::Seq, stack);
+                });
+                black_box(&rhs);
+            });
+        });
+    }
+    group.finish();
+}
+
+fn bench_spai_build(c: &mut Criterion) {
+    let mut group = c.benchmark_group("spai_build");
+    for &n in &[256usize, 1024, 4096] {
+        let a = nonsymmetric_tridiagonal(n);
+        group.bench_with_input(BenchmarkId::new("tridiag_f64", n), &n, |b, _| {
+            b.iter(|| {
+                let pc =
+                    Spai::<usize, f64>::try_new(black_box(a.as_ref()), SpaiPattern::ColumnsOfA)
+                        .unwrap();
+                black_box(&pc);
+            });
+        });
+    }
     group.finish();
 }
 
@@ -469,5 +647,11 @@ criterion_group!(
     bench_ilutp_apply,
     bench_ic0_apply,
     bench_ic0_refactorize,
+    bench_ssor_apply,
+    bench_poly_apply,
+    bench_iluk_symbolic,
+    bench_ict_apply,
+    bench_fsai,
+    bench_spai_build,
 );
 criterion_main!(benches);
