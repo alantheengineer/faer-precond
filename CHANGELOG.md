@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ssor::Ssor<I, T>` — SSOR / symmetric Gauss-Seidel preconditioner, a
+  fill-free stationary method built from `A`'s own `D`/`L`/`U` split and one
+  relaxation factor (`SsorParams { omega }`; `omega = 1` is SGS). Apply is one
+  lower solve, a diagonal scaling, and one upper solve — zero scratch. Symmetric
+  for SPD `A`. `try_new` / `refactorize` (allocation-free, pattern depends only
+  on `A`'s structure); `SsorError` (`NonSquareMatrix`, `MissingDiagonal`,
+  `UnsortedRowIndices`, `ZeroDiagonal`, `InvalidOmega`, `PatternMismatch`).
+- `poly::Poly<I, T>` — polynomial preconditioner, `M^{-1} = p(A)` applied with
+  matrix-vector products only (no triangular solves), so it parallelises freely.
+  `PolyKind::{Neumann, Chebyshev}`, `PolyParams { degree, kind }`, and
+  `try_new_auto` with `BoundEstimate::{Gershgorin, PowerIteration, Manual}` for
+  the Chebyshev spectral interval. Chebyshev is only as good as its bounds —
+  prefer `Manual` when the spectrum is known. `refactorize` updates the stored
+  operator (and re-estimates bounds when built via `try_new_auto`). `PolyError`
+  (`NonSquareMatrix`, `ZeroDegree`, `InvalidOmega`, `InvalidBounds`,
+  `PatternMismatch`).
+- `iluk::Iluk<I, T>` — level-of-fill incomplete LU, ILU(k). Generalises ILU(0)
+  with structural fill up to level `k` (`IlukParams { level }`); `k = 0`
+  reproduces ILU(0) exactly. Value-independent pattern, so it keeps ILU(0)'s
+  symbolic/numeric split (`SymbolicIluk`, `new_with_symbolic`) and
+  allocation-free `refactorize`. Reuses ILU(0)'s triangular-solve apply.
+  `IlukError` mirrors `Ilu0Error`.
+- `ict::Ict<I, T>` — threshold incomplete Cholesky, the SPD analogue of ILUTP.
+  Adaptive fill via a relative drop tolerance and a per-column budget
+  (`IctParams { drop_tol, fill, norm }`, reusing `FillControl` / `RowNorm`).
+  Apply is the same two triangular solves as IC(0). `try_new` /
+  `try_new_with_params` / `refactorize` (reuses capacity; not allocation-free,
+  as the pattern is value-dependent). `IctError` (`NonSquareMatrix`,
+  `NotPositiveDefinite`, `PatternMismatch`, `InvalidDropTol`,
+  `InvalidFillControl`).
+- `fsai::Fsai<I, T>` — factorised sparse approximate inverse for HPD `A`:
+  `M^{-1} = G^H G` with `G ~= L^{-1}`, built from one small dense SPD solve per
+  row. Apply is two sparse matvecs (no triangular solves). `FsaiPattern::{LowerOfA,
+  LowerOfPower}`. `FsaiError` (`NonSquareMatrix`, `InvalidPower`,
+  `NotPositiveDefinite`).
+- `spai::Spai<I, T>` — sparse approximate inverse for general (nonsymmetric)
+  `A`, minimising `||A M - I||_F` column-by-column via dense least squares.
+  Apply is a single sparse matvec. `SpaiPattern::{ColumnsOfA, ColumnsOfPower}`.
+  `SpaiError` (`NonSquareMatrix`, `InvalidPower`). Note: the build is heavier
+  than an ILU (a least-squares solve per column), so it pays off when the
+  preconditioner is applied many times; adaptive pattern growth is future work.
 - `ilutp::Ilutp<I, T>` — threshold ILU with column partial pivoting (Saad's
   dual-threshold ILUT + the "P", SPARSKIT `ilutp`). The general-purpose
   workhorse for hard nonsymmetric systems: it keeps the most significant fill
