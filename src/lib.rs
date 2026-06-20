@@ -11,9 +11,15 @@
 //! |---|---|---|---|
 //! | [`JacobiPrecond`] | diagonal of `A` | `O(n)` | Diagonally-dominant problems. |
 //! | [`BlockJacobiPrecond`] | dense diagonal blocks of `A` | `O(sum b_k²)` | Arbitrary block partition; LU per block. |
+//! | [`Ssor`] | `A`'s `D`/`L`/`U` split + relaxation | `O(nnz(A))` | Stationary; two triangular solves, no fill. |
 //! | [`Ilu0`] | CSC sparsity of `A` | `O(nnz(A))` | Zero-fill incomplete LU. |
+//! | [`Iluk`] | CSC of `A` + fill level `k` | `O(nnz_LU)` | Level-of-fill incomplete LU; between ILU(0) and ILUTP. |
 //! | [`Ic0`] | CSC lower triangle of `A` | `O(nnz_L)` | Zero-fill incomplete Cholesky for HPD `A`. |
+//! | [`Ict`] | CSC of `A` + threshold/fill params | `O(nnz_L)` | Threshold incomplete Cholesky; SPD analogue of ILUTP. |
 //! | [`Ilutp`] | CSC of `A` + threshold/fill params | `O(nnz_LU)` | Threshold ILU with partial pivoting; general nonsymmetric workhorse. |
+//! | [`Poly`] | `A` + polynomial degree/bounds | `O(degree · nnz(A))` | Matvec-only (Neumann/Chebyshev); no triangular solves. |
+//! | [`Fsai`] | CSC of `A` + pattern | `O(nnz_G)` | Factorised approximate inverse for HPD `A`; matvec apply. |
+//! | [`Spai`] | CSC of `A` + pattern | `O(nnz_M)` | Sparse approximate inverse (nonsymmetric); matvec apply. |
 //! | [`SolvePrecond`] | any faer factorisation (`Llt`, `Lu`, `Qr`, ...) | factorisation-dependent | Adapter, not a factorisation. |
 //!
 //! # Choosing a preconditioner
@@ -44,6 +50,23 @@
 //!   Several fields per mesh node, coupled species, or tightly-coupled
 //!   sub-systems. Inverting those blocks exactly captures the strong local
 //!   coupling that point-Jacobi misses.
+//! - **[`Ssor`] for a cheap, fill-free stationary preconditioner.** Built
+//!   straight from `A`'s own triangles with one relaxation knob; a step up from
+//!   point-Jacobi when you do not want to store a factorisation. Symmetric for
+//!   SPD `A`, so it pairs with CG.
+//! - **[`Iluk`] when [`Ilu0`] is too weak but you want a fixed pattern.**
+//!   Level-of-fill ILU: more accurate than ILU(0), but with a value-independent
+//!   pattern (allocation-free refactorisation), unlike [`Ilutp`].
+//! - **[`Ict`] for hard SPD problems.** The threshold incomplete Cholesky:
+//!   IC(0)'s adaptive cousin, for ill-conditioned SPD systems where zero-fill
+//!   stalls. The SPD counterpart to [`Ilutp`].
+//! - **[`Poly`], [`Fsai`] or [`Spai`] when triangular solves are the
+//!   bottleneck.** These apply through matrix-vector products only — no
+//!   sequential forward/back substitution — so they parallelise far better on
+//!   many cores or accelerators. [`Poly`] (Neumann/Chebyshev) and [`Fsai`] are
+//!   for SPD `A`; [`Spai`] is the nonsymmetric approximate inverse. The trade-off
+//!   is a weaker approximation per unit of single-core work; [`Poly`]'s
+//!   Chebyshev form also needs a spectral-interval estimate.
 //! - **[`SolvePrecond`] to reuse an exact factorisation.** Factorise a cheaper
 //!   approximation of `A` once and let the Krylov method correct the rest.
 //!
@@ -127,14 +150,27 @@
 
 pub mod adapters;
 pub mod block_jacobi;
+pub mod fsai;
 pub mod ic0;
+pub mod ict;
 pub mod ilu0;
+pub mod iluk;
 pub mod ilutp;
 pub mod jacobi;
+pub mod poly;
+pub mod spai;
+pub mod ssor;
+mod util;
 
 pub use adapters::SolvePrecond;
 pub use block_jacobi::{BlockJacobiError, BlockJacobiPrecond};
+pub use fsai::{Fsai, FsaiError, FsaiPattern};
 pub use ic0::{Ic0, Ic0Error, SymbolicIc0};
+pub use ict::{Ict, IctError, IctParams};
 pub use ilu0::{Ilu0, Ilu0Error, SymbolicIlu0};
+pub use iluk::{Iluk, IlukError, IlukParams, SymbolicIluk};
 pub use ilutp::{FillControl, Ilutp, IlutpError, IlutpParams, RowNorm};
 pub use jacobi::{JacobiError, JacobiPrecond};
+pub use poly::{BoundEstimate, Poly, PolyError, PolyKind, PolyParams};
+pub use spai::{Spai, SpaiError, SpaiPattern};
+pub use ssor::{Ssor, SsorError, SsorParams};

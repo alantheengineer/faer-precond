@@ -13,7 +13,10 @@ use faer::matrix_free::conjugate_gradient::{
 use faer::sparse::{SparseColMat, Triplet};
 use faer::{Mat, Par, Side, mat};
 
-use faer_precond::{BlockJacobiPrecond, Ic0, Ilu0, Ilutp, JacobiPrecond, SolvePrecond};
+use faer_precond::{
+    BlockJacobiPrecond, Fsai, FsaiPattern, Ic0, Ict, Ilu0, Iluk, Ilutp, JacobiPrecond, Poly,
+    SolvePrecond, Spai, SpaiPattern, Ssor, SsorParams,
+};
 
 /// 5-point Laplacian on a `grid × grid` mesh (full Hermitian CSC storage).
 /// SPD and diagonally dominant — used as the canonical SPD test problem.
@@ -350,6 +353,99 @@ fn ic0_refactorize_drives_cg_on_changed_values() {
     assert!(
         iters < baseline,
         "IC(0) refactorize should accelerate CG: baseline {baseline} vs reused {iters}",
+    );
+}
+
+#[test]
+fn ssor_accelerates_cg_on_laplacian() {
+    let a = laplacian_2d(12);
+    let n = a.nrows();
+    let baseline = cg_iter_count(&a, IdentityPrecond { dim: n }, 500);
+    let pc = Ssor::<usize, f64>::try_new(a.as_ref(), SsorParams::default()).unwrap();
+    let pc_iters = cg_iter_count(&a, &pc, 500);
+    assert!(
+        pc_iters < baseline,
+        "SSOR should accelerate CG: baseline {baseline} vs preconditioned {pc_iters}",
+    );
+}
+
+#[test]
+fn ict_accelerates_cg_on_laplacian() {
+    let a = laplacian_2d(12);
+    let n = a.nrows();
+    let baseline = cg_iter_count(&a, IdentityPrecond { dim: n }, 500);
+    let pc = Ict::<usize, f64>::try_new(a.as_ref()).expect("Laplacian is SPD");
+    let pc_iters = cg_iter_count(&a, &pc, 500);
+    assert!(
+        pc_iters < baseline,
+        "ICT should accelerate CG: baseline {baseline} vs preconditioned {pc_iters}",
+    );
+}
+
+#[test]
+fn fsai_accelerates_cg_on_laplacian() {
+    let a = laplacian_2d(12);
+    let n = a.nrows();
+    let baseline = cg_iter_count(&a, IdentityPrecond { dim: n }, 500);
+    let pc = Fsai::<usize, f64>::try_new(a.as_ref(), FsaiPattern::LowerOfPower { power: 2 })
+        .expect("Laplacian is SPD");
+    let pc_iters = cg_iter_count(&a, &pc, 500);
+    assert!(
+        pc_iters < baseline,
+        "FSAI should accelerate CG: baseline {baseline} vs preconditioned {pc_iters}",
+    );
+}
+
+#[test]
+fn chebyshev_poly_accelerates_cg_on_laplacian() {
+    let grid = 12;
+    let a = laplacian_2d(grid);
+    let n = a.nrows();
+    let baseline = cg_iter_count(&a, IdentityPrecond { dim: n }, 500);
+    // Exact 5-point-Laplacian spectral bounds (a polynomial preconditioner is
+    // only as good as its interval; for the Laplacian we know it in closed form).
+    let h = std::f64::consts::PI / (grid as f64 + 1.0);
+    let lambda_min = 4.0 - 4.0 * h.cos();
+    let lambda_max = 4.0 - 4.0 * (grid as f64 * h).cos();
+    let pc = Poly::<usize, f64>::try_new(a.as_ref(), faer_precond::PolyParams {
+        degree: 6,
+        kind: faer_precond::PolyKind::Chebyshev {
+            lambda_min,
+            lambda_max,
+        },
+    })
+    .expect("valid bounds");
+    let pc_iters = cg_iter_count(&a, &pc, 500);
+    assert!(
+        pc_iters < baseline,
+        "Chebyshev polynomial should accelerate CG: baseline {baseline} vs preconditioned {pc_iters}",
+    );
+}
+
+#[test]
+fn iluk_accelerates_bicgstab_on_nonsymmetric_problem() {
+    let a = advection_diffusion_2d(12, 0.7);
+    let n = a.nrows();
+    let baseline = bicgstab_iter_count(&a, IdentityPrecond { dim: n }, IdentityPrecond { dim: n }, 500);
+    let pc = Iluk::<usize, f64>::try_new(a.as_ref(), 1).expect("ILU(1) factorisation");
+    let pc_iters = bicgstab_iter_count(&a, &pc, IdentityPrecond { dim: n }, 500);
+    assert!(
+        pc_iters <= baseline,
+        "ILU(1) should not need more BiCGSTAB iters than baseline: baseline {baseline} vs {pc_iters}",
+    );
+}
+
+#[test]
+fn spai_accelerates_bicgstab_on_nonsymmetric_problem() {
+    let a = advection_diffusion_2d(12, 0.7);
+    let n = a.nrows();
+    let baseline = bicgstab_iter_count(&a, IdentityPrecond { dim: n }, IdentityPrecond { dim: n }, 500);
+    let pc = Spai::<usize, f64>::try_new(a.as_ref(), SpaiPattern::ColumnsOfPower { power: 2 })
+        .expect("SPAI factorisation");
+    let pc_iters = bicgstab_iter_count(&a, &pc, IdentityPrecond { dim: n }, 500);
+    assert!(
+        pc_iters <= baseline,
+        "SPAI should not need more BiCGSTAB iters than baseline: baseline {baseline} vs {pc_iters}",
     );
 }
 
