@@ -68,7 +68,7 @@ badly-conditioned diffusion problem — run it with
 
 ```toml
 [dependencies]
-faer-precond = "0.1"
+faer-precond = "0.2"
 faer = "0.24"
 dyn-stack = "0.13"
 ```
