@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-20
+
 ### Added
 
 - `ssor::Ssor<I, T>` — SSOR / symmetric Gauss-Seidel preconditioner, a
@@ -120,5 +122,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ILU(0) and IC(0) reuse `faer::sparse::linalg::triangular_solve` for the
   forward and back solves rather than re-implementing them.
 
-[Unreleased]: https://github.com/alantheengineer/faer-precond/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/alantheengineer/faer-precond/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/alantheengineer/faer-precond/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alantheengineer/faer-precond/releases/tag/v0.1.0

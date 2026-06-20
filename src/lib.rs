@@ -145,7 +145,7 @@
 //!
 //! Dual-licensed under `MIT OR Apache-2.0`.
 
-#![doc(html_root_url = "https://docs.rs/faer-precond/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/faer-precond/0.2.0")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod adapters;
